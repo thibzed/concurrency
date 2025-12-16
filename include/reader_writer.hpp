@@ -38,6 +38,7 @@ class RWLock {
         std::condition_variable cv_;
 };
 
+//RAII Wrapper
 class ReadGuard{
     public:
         ReadGuard(const ReadGuard&) = delete; 
