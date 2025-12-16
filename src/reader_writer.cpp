@@ -4,10 +4,28 @@
 #include <chrono>
 #include <iostream>
 #include <atomic>
+#include <map>
+#include <string>
+#include <random>
 
 using clk = std::chrono::steady_clock;
 using ms = std::chrono::milliseconds;
 
+struct SharedDatabase {
+    std::map<std::string, int> map;
+    RWLock& rw;
+
+    SharedDatabase(RWLock& lock) : rw(lock) {}
+
+    int get(const std::string& key){
+        ReadGuard g(rw);
+        return map[key];
+    }
+    void set(const std::string& key, int value){
+        WriteGuard g(rw);
+        map[key] = value;
+    }
+};
 
 void test_simulatenous_readers() {
     RWLock rw;
@@ -107,9 +125,71 @@ void test_starvation() {
     }
 }
 
+void test_database(){
+    RWLock rw;
+    SharedDatabase db(rw);  
+    std::mutex mtx;
+
+    constexpr int DB_SIZE = 10;
+    constexpr int WRITERS_COUNT = 2;
+    constexpr int READERS_COUNT = DB_SIZE;
+    constexpr int MS_SLEEP = 5;
+
+    std::atomic<bool> end{false};
+    std::atomic<int> writed{0};
+
+    for (int i = 0 ; i < DB_SIZE ; i++){
+        std::string s = "KEY_" + std::to_string(i);
+        db.map[s] = 0;
+    }
+
+    auto reader = [&] (int id){
+        while(!end){
+            ReadGuard g(rw);
+            try{
+                std::lock_guard<std::mutex> lock(mtx);
+                std::cout << db.map.at("KEY_" + std::to_string(id)) << std::endl;
+            }
+            catch (...) {
+                std::cout << "Key out of range." << std::endl;
+            }
+        }
+    };
+
+    auto writer = [&] (int id){
+        std::mt19937 rng(id);
+        std::uniform_int_distribution<int> dist(0, DB_SIZE - 1);
+        while(!end){
+            int key_id = dist(rng);
+            WriteGuard g(rw);
+            db.map["KEY_" + std::to_string(key_id)]++;
+            writed++;
+            if(writed.fetch_add(1) >= 999) end = true;
+        }
+    };
+
+    std::vector<std::thread> readers;
+    for (int i = 0 ; i < READERS_COUNT ; i++){
+        readers.emplace_back(reader, i);
+    }
+
+    std::vector<std::thread> writers;
+    for (int i = 0 ; i < WRITERS_COUNT ; i++){
+        writers.emplace_back(writer, i);
+    }
+
+    for (auto& t : writers){
+        t.join();
+    }
+    for (auto& t : readers){
+        t.join();
+    }
+}
+
 int main(){
     //test_simulatenous_readers();
     //test_simulatenous_writers();
-    test_starvation();
+    //test_starvation();
+    test_database();
     return 0;
 }
