@@ -24,6 +24,10 @@ class Semaphore{
             capacity_++;
             cv_.notify_one();
         }
+        bool try_acquire(){
+            if (capacity_ > 0) return true;
+            return false;
+        }
 
     private:
         size_t capacity_;
