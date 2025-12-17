@@ -49,7 +49,20 @@ void test_RAII(){
     assert(acquired == true);
 }
 
+void test_early_release(){
+    Semaphore sem(1);
+    {
+        SemaphoreGuard guard(sem);
+        guard.release();
+
+        bool can_acquire = sem.try_acquire();
+        assert(can_acquire == true);
+        sem.release();
+    }
+}
+
 int main (){
     //test_concurrency_limit();
-    test_RAII();
+    //test_RAII();
+    test_early_release();
 }
